@@ -23,10 +23,14 @@
 #include "metrics.h"
 
 
+#define MAX_JOBS	(8)
+#define MAX_LOOP	(0xFFFFFF)
+
+
 /******************************************************************************
  * Globals
  *****************************************************************************/
-pthread_barrier_t barrier;
+pthread_barrier_t Barrier;
 
 
 /******************************************************************************
@@ -56,6 +60,7 @@ void *rr_thread(void *arg)
 	assert(pthread_setschedparam(pthread_self(), SCHED_RR, &schp) == 0);
 	printf("Thread %x with %s class started in Core %d\n", targ.tid,
 	       targ.class, targ.core);
+	pthread_barrier_wait(&Barrier);
 
 	/* do the main job */
 	gettimeofday(&time, NULL);
@@ -66,6 +71,7 @@ void *rr_thread(void *arg)
 		lt1 = time.tv_sec*1000 + time.tv_usec/1000;
 		for (j = 0; j < MAX_LOOP; j++) {
 			rr_count++;
+			report_loop_increment(SC_RR);
 		}
 		gettimeofday(&time, NULL);
 		lt2 = time.tv_sec*1000 + time.tv_usec/1000;
@@ -103,6 +109,7 @@ void *fifo_thread(void *arg)
 	assert(pthread_setschedparam(pthread_self(), SCHED_FIFO, &schp) == 0);
 	printf("Thread %x with %s class started in Core %d\n", targ.tid,
 	       targ.class, targ.core);
+	pthread_barrier_wait(&Barrier);
 
 	/* do the main job */
 	gettimeofday(&time, NULL);
@@ -113,6 +120,7 @@ void *fifo_thread(void *arg)
 		lt1 = time.tv_sec*1000 + time.tv_usec/1000;
 		for (j = 0; j < MAX_LOOP; j++) {
 			fifo_count++;
+			report_loop_increment(SC_FIFO);
 		}
 		gettimeofday(&time, NULL);
 		lt2 = time.tv_sec*1000 + time.tv_usec/1000;
@@ -140,14 +148,15 @@ void *normal_thread(void *arg)
 	/* copy args to local stack */
 	memcpy((void*)&targ, (const void*)arg, sizeof(targ));
 
-	/* let's renice it to highest priority level */
-	new_nice = nice(-20);
-
 	CPU_ZERO(&cpuset);
 	CPU_SET(targ.core, &cpuset);
 	assert(sched_setaffinity(0, sizeof cpuset, &cpuset) == 0);
+
+	/* let's renice it to highest priority level */
+	new_nice = nice(-20);
 	printf("Thread %x with %s class started in Core %d\n", targ.tid,
 	       targ.class, targ.core);
+	pthread_barrier_wait(&Barrier);
 
 	/* do the main job */
 	gettimeofday(&time, NULL);
@@ -158,6 +167,7 @@ void *normal_thread(void *arg)
 		lt1 = time.tv_sec*1000 + time.tv_usec/1000;
 		for (j = 0; j < MAX_LOOP; j++) {
 			normal_count++;
+			report_loop_increment(SC_NORMAL);
 		}
 		gettimeofday(&time, NULL);
 		lt2 = time.tv_sec*1000 + time.tv_usec/1000;
@@ -169,6 +179,158 @@ void *normal_thread(void *arg)
 
 	printf("Thread %x with %s class is terminated\n", targ.tid, targ.class);
 	return NULL;
+}
+
+void * handle_normals(void *arg)
+{
+	int tmax, i;
+	pthread_t *tid_n;
+	pthread_attr_t attr_n;
+	struct thread_arg targ;
+
+	/* copy args to local stack */
+	memcpy((void*)&targ, (const void*)arg, sizeof(targ));
+	tmax = targ.max_threads;
+	if (tmax <= 0) {
+		return 0;
+	}
+
+	/* create thread id objects dynamically */
+	tid_n = malloc(tmax * sizeof(pthread_t));
+	if (tid_n == NULL) {
+		printf("tid_n: malloc failure!\n");
+		return 0;
+	}
+
+	/* initialize thread attributes for all types */
+	pthread_attr_init(&attr_n);
+	assert(pthread_attr_setschedpolicy(&attr_n, SCHED_OTHER) == 0);
+
+	/* create different classes of threads */
+	strcpy(targ.class, "SCHED_OTHER");
+	for (i = 0; i < tmax; i++) {
+		targ.tid = i;
+		assert(pthread_create(&tid_n[i], &attr_n, normal_thread,
+				      (void *)&targ) == 0);
+
+		/* sleep to allow new thread to execute */
+		usleep(1000);
+	}
+	printf("Created %d SCHED_OTHER threads\n", i);
+
+	/* wait for all normal threads to complete */
+	for (i = 0; i < tmax; i++) {
+		pthread_join(tid_n[i], NULL);
+	}
+
+	if (tid_n != NULL)
+		free(tid_n);
+
+	report_sclass_complete(SC_NORMAL);
+
+	return 0;
+}
+
+
+void * handle_rrs(void *arg)
+{
+	int tmax, i;
+	pthread_t *tid_r;
+	pthread_attr_t attr_r;
+	struct thread_arg targ;
+
+	/* copy args to local stack */
+	memcpy((void*)&targ, (const void*)arg, sizeof(targ));
+	tmax = targ.max_threads;
+	if (tmax <= 0) {
+		return 0;
+	}
+
+	/* create thread id objects dynamically */
+	tid_r = malloc(tmax * sizeof(pthread_t));
+	if (tid_r == NULL) {
+		printf("tid_r: malloc failure!\n");
+		return 0;
+	}
+
+	/* initialize thread attributes for all types */
+	pthread_attr_init(&attr_r);
+	assert(pthread_attr_setschedpolicy(&attr_r, SCHED_RR) == 0);
+
+	/* create threads */
+	strcpy(targ.class, "SCHED_RR");
+	for (i = 0; i < tmax; i++) {
+		targ.tid = i;
+		assert(pthread_create(&tid_r[i], &attr_r, rr_thread,
+				      (void *)&targ) == 0);
+
+		/* sleep to allow new thread to execute */
+		usleep(1000);
+	}
+	printf("Created %d SCHED_RR threads\n", i);
+
+
+	/* wait for all rr threads to complete */
+	for (i = 0; i < tmax; i++) {
+		pthread_join(tid_r[i], NULL);
+	}
+
+	if (tid_r != NULL)
+		free(tid_r);
+
+	report_sclass_complete(SC_RR);
+
+	return 0;
+}
+
+
+void * handle_fifos(void *arg)
+{
+	int tmax, i;
+	pthread_t *tid_f;
+	pthread_attr_t attr_f;
+	struct thread_arg targ;
+
+	/* copy args to local stack */
+	memcpy((void*)&targ, (const void*)arg, sizeof(targ));
+	tmax = targ.max_threads;
+	if (tmax <= 0) {
+		return 0;
+	}
+
+	/* create thread id objects dynamically */
+	tid_f = malloc(tmax * sizeof(pthread_t));
+	if (tid_f == NULL) {
+		printf("tid_f: malloc failure!\n");
+	}
+
+	/* initialize thread attributes for all types */
+	pthread_attr_init(&attr_f);
+	assert(pthread_attr_setschedpolicy(&attr_f, SCHED_FIFO) == 0);
+
+	/* create threads */
+	strcpy(targ.class, "SCHED_FIFO");
+	for (i = 0; i < tmax; i++) {
+		targ.tid = i;
+		assert(pthread_create(&tid_f[i], &attr_f, fifo_thread,
+				      (void *)&targ) == 0);
+
+		/* sleep to allow new thread to execute */
+		usleep(1000);
+	}
+	printf("Created %d SCHED_FIFO threads\n", i);
+
+	/* wait for all fifo threads to complete */
+	for (i = 0; i < tmax; i++) {
+		pthread_join(tid_f[i], NULL);
+	}
+
+	if (tid_f != NULL)
+		free(tid_f);
+
+	report_sclass_complete(SC_FIFO);
+
+	return 0;
 }
 
 void print_usage(char *prog)
@@ -184,190 +346,14 @@ void print_usage(char *prog)
 	printf("\n   Note:\n   -----");
 	printf("\n\t=>  '-c' option is mandatory");
 	printf("\n\t=>  at least one thread is mandatory");
-	printf("\n\t=>  do not use more than 10 threads in total");
+	printf("\n\t=>  do not use more than 30 threads in total");
 	printf("\n\n");
-}
-
-void * handle_normals(void *arg)
-{
-	int tmax, i;
-	pthread_t *tid_n;
-	pthread_attr_t attr_n;
-	struct thread_arg targ;
-	struct timeval time;
-	unsigned long t1, t2; /* in millisec */
-
-	/* copy args to local stack */
-	memcpy((void*)&targ, (const void*)arg, sizeof(targ));
-	tmax = targ.max_threads;
-	if (tmax <= 0) {
-		return 0;
-	}
-
-	gettimeofday(&time, NULL);
-	t1 = time.tv_sec*1000 + time.tv_usec/1000;
-
-	/* create thread id objects dynamically */
-	tid_n = malloc(tmax * sizeof(pthread_t));
-	if (tid_n == NULL) {
-		printf("tid_n: malloc failure!\n");
-		return 0;
-	}
-
-	/* initialize thread attributes for all types */
-	pthread_attr_init(&attr_n);
-	assert(pthread_attr_setschedpolicy(&attr_n, SCHED_OTHER) == 0);
-	pthread_barrier_wait(&barrier);
-
-	/* create different classes of threads */
-	strcpy(targ.class, "SCHED_OTHER");
-	for (i = 0; i < tmax; i++) {
-		targ.tid = i;
-		assert(pthread_create(&tid_n[i], &attr_n, normal_thread,
-				      (void *)&targ) == 0);
-
-		/* sleep to allow new thread to execute */
-		usleep(1000);
-	}
-	printf("Created %x SCHED_OTHER threads\n", i);
-
-	/* wait for all normal threads to complete */
-	for (i = 0; i < tmax; i++) {
-		pthread_join(tid_n[i], NULL);
-	}
-
-	if (tid_n != NULL)
-		free(tid_n);
-
-	gettimeofday(&time, NULL);
-	t2 = time.tv_sec*1000 + time.tv_usec/1000;
-	report_sclass_complete(SC_NORMAL, t2 - t1);
-
-	return 0;
-}
-
-
-void * handle_rrs(void *arg)
-{
-	int tmax, i;
-	pthread_t *tid_r;
-	pthread_attr_t attr_r;
-	struct thread_arg targ;
-	struct timeval time;
-	unsigned long t1, t2; /* in millisec */
-
-	/* copy args to local stack */
-	memcpy((void*)&targ, (const void*)arg, sizeof(targ));
-	tmax = targ.max_threads;
-	if (tmax <= 0) {
-		return 0;
-	}
-
-	gettimeofday(&time, NULL);
-	t1 = time.tv_sec*1000 + time.tv_usec/1000;
-
-	/* create thread id objects dynamically */
-	tid_r = malloc(tmax * sizeof(pthread_t));
-	if (tid_r == NULL) {
-		printf("tid_r: malloc failure!\n");
-		return 0;
-	}
-
-	/* initialize thread attributes for all types */
-	pthread_attr_init(&attr_r);
-	assert(pthread_attr_setschedpolicy(&attr_r, SCHED_RR) == 0);
-	pthread_barrier_wait(&barrier);
-
-	/* create threads */
-	strcpy(targ.class, "SCHED_RR");
-	for (i = 0; i < tmax; i++) {
-		targ.tid = i;
-		assert(pthread_create(&tid_r[i], &attr_r, rr_thread,
-				      (void *)&targ) == 0);
-
-		/* sleep to allow new thread to execute */
-		usleep(1000);
-	}
-	printf("Created %x SCHED_RR threads\n", i);
-
-
-	/* wait for all rr threads to complete */
-	for (i = 0; i < tmax; i++) {
-		pthread_join(tid_r[i], NULL);
-	}
-
-	if (tid_r != NULL)
-		free(tid_r);
-
-	gettimeofday(&time, NULL);
-	t2 = time.tv_sec*1000 + time.tv_usec/1000;
-	report_sclass_complete(SC_RR, t2 - t1);
-
-	return 0;
-}
-
-
-void * handle_fifos(void *arg)
-{
-	int tmax, i;
-	pthread_t *tid_f;
-	pthread_attr_t attr_f;
-	struct thread_arg targ;
-	struct timeval time;
-	unsigned long t1, t2; /* in millisec */
-
-	/* copy args to local stack */
-	memcpy((void*)&targ, (const void*)arg, sizeof(targ));
-	tmax = targ.max_threads;
-	if (tmax <= 0) {
-		return 0;
-	}
-
-	gettimeofday(&time, NULL);
-	t1 = time.tv_sec*1000 + time.tv_usec/1000;
-
-	/* create thread id objects dynamically */
-	tid_f = malloc(tmax * sizeof(pthread_t));
-	if (tid_f == NULL) {
-		printf("tid_f: malloc failure!\n");
-	}
-
-	/* initialize thread attributes for all types */
-	pthread_attr_init(&attr_f);
-	assert(pthread_attr_setschedpolicy(&attr_f, SCHED_FIFO) == 0);
-	pthread_barrier_wait(&barrier);
-
-	/* create threads */
-	strcpy(targ.class, "SCHED_FIFO");
-	for (i = 0; i < tmax; i++) {
-		targ.tid = i;
-		assert(pthread_create(&tid_f[i], &attr_f, fifo_thread,
-				      (void *)&targ) == 0);
-
-		/* sleep to allow new thread to execute */
-		usleep(1000);
-	}
-	printf("Created %x SCHED_FIFO threads\n", i);
-
-	/* wait for all fifo threads to complete */
-	for (i = 0; i < tmax; i++) {
-		pthread_join(tid_f[i], NULL);
-	}
-
-	if (tid_f != NULL)
-		free(tid_f);
-
-	gettimeofday(&time, NULL);
-	t2 = time.tv_sec*1000 + time.tv_usec/1000;
-	report_sclass_complete(SC_FIFO, t2 - t1);
-
-	return 0;
 }
 
 int main(int argc, char *argv[])
 {
 	int core, sched_other, sched_fifo, sched_rr;
-	int c;
+	int c, threads;
 	pthread_t tid_n, tid_f, tid_r;
 	pthread_attr_t attr;
 	struct thread_arg targ;
@@ -407,7 +393,14 @@ int main(int argc, char *argv[])
 		return -1;
 	}
 
-	if((sched_other + sched_fifo + sched_rr) > 30) {
+	if (sched_other > 0)
+		threads = sched_other;
+	if (sched_fifo > 0)
+		threads += sched_fifo;
+	if (sched_rr > 0)
+		threads += sched_rr;
+
+	if (threads > 30) {
 		printf("\nPlease limit your number of threads!\n");
 		print_usage(argv[0]);
 	}
@@ -415,7 +408,7 @@ int main(int argc, char *argv[])
 	/* thread attr for master thread of all classes is set as FIFO */
 	pthread_attr_init(&attr);
 	assert(pthread_attr_setschedpolicy(&attr, SCHED_FIFO) == 0);
-	pthread_barrier_init(&barrier, NULL, 3);
+	pthread_barrier_init(&Barrier, NULL, threads);
 
 
 	targ.core = core;
@@ -466,7 +459,7 @@ int main(int argc, char *argv[])
 		pthread_join(tid_n, NULL);
 	}
 
-	metrics_print();
+	metrics_print(sched_fifo, sched_rr, sched_other);
 	metrics_exit();
 
 	return 0;

@@ -11,9 +11,6 @@
 #define SCHED_TEST_H
 
 
-#define MAX_JOBS	(64)
-#define MAX_LOOP	(0xFFFFFF)
-
 struct thread_arg {
 	int core;
 	int tid;

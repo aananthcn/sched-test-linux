@@ -11,6 +11,7 @@
 #define METRICS_H
 
 struct thread_metrics {
+	unsigned long count;
 	int jobs;
 	int loops;
 	int tof; /* time of finish */
@@ -20,9 +21,10 @@ struct thread_metrics {
 };
 
 
+void report_loop_increment(enum sched_class sc);
 void report_loop_complete(enum sched_class sc, unsigned long period);
 void report_job_complete(enum sched_class sc, unsigned long period);
-void report_sclass_complete(enum sched_class sc, unsigned long period);
+void report_sclass_complete(enum sched_class sc);
 
 
 #endif
