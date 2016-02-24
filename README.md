@@ -6,16 +6,16 @@ SCHED_OTHERS) by modifying /proc/sys/kernel/sched_rt_runtime_us
 
 Usage: 
 ======
-    ./sched_test -n NX -f NF -r NR -c CN <br>
-        -n	Creates NX number of SCHED_NORMAL threads <br>
-        -f	Creates FX number of SCHED_FIFO threads <br>
-        -r	Creates RX number of SCHED_RR threads <br>
-        -c	Runs all the above threads in the CPU core 'CN' <br>
+    ./sched_test -n NX -f NF -r NR -c CN 
+        -n	Creates NX number of SCHED_NORMAL threads
+        -f	Creates FX number of SCHED_FIFO threads
+        -r	Creates RX number of SCHED_RR threads
+        -c	Runs all the above threads in the CPU core 'CN'
 
-    Note: <br>
-        '-c' option is mandatory <br>
-        at least one thread is mandatory <br>
-        do not use more than 30 threads in total <br>
+    Note:
+        '-c' option is mandatory 
+        at least one thread is mandatory
+        do not use more than 30 threads in total
 	
 	
 How to build
