@@ -60,7 +60,7 @@ void *rr_thread(void *arg)
 	/* set realtime priority to lowest */
 	schp.sched_priority = 1;
 	assert(pthread_setschedparam(pthread_self(), SCHED_RR, &schp) == 0);
-	printf("Thread %x with %s class started in Core %d\n", targ.tid,
+	printf("Thread %x with %s class started in CPU %d\n", targ.tid,
 	       targ.class, targ.core);
 	pthread_barrier_wait(&Barrier);
 
@@ -83,7 +83,8 @@ void *rr_thread(void *arg)
 	jt2 = time.tv_sec*1000 + time.tv_usec/1000;
 	report_job_complete(SC_RR, jt2 - jt1);
 
-	printf("Thread %x with %s class is terminated\n", targ.tid, targ.class);
+	printf("Thread %x with %s class is terminated on CPU %d\n", targ.tid,
+	       targ.class, targ.core);
 	return NULL;
 }
 
@@ -109,7 +110,7 @@ void *fifo_thread(void *arg)
 	/* set realtime priority to lowest */
 	schp.sched_priority = 1;
 	assert(pthread_setschedparam(pthread_self(), SCHED_FIFO, &schp) == 0);
-	printf("Thread %x with %s class started in Core %d\n", targ.tid,
+	printf("Thread %x with %s class started in CPU %d\n", targ.tid,
 	       targ.class, targ.core);
 	pthread_barrier_wait(&Barrier);
 
@@ -132,7 +133,8 @@ void *fifo_thread(void *arg)
 	jt2 = time.tv_sec*1000 + time.tv_usec/1000;
 	report_job_complete(SC_FIFO, jt2 - jt1);
 
-	printf("Thread %x with %s class is terminated\n", targ.tid, targ.class);
+	printf("Thread %x with %s class is terminated on CPU %d\n", targ.tid,
+	       targ.class, targ.core);
 	return NULL;
 }
 
@@ -156,7 +158,7 @@ void *normal_thread(void *arg)
 
 	/* let's renice it to highest priority level */
 	new_nice = nice(-20);
-	printf("Thread %x with %s class started in Core %d\n", targ.tid,
+	printf("Thread %x with %s class started in CPU %d\n", targ.tid,
 	       targ.class, targ.core);
 	pthread_barrier_wait(&Barrier);
 
@@ -179,7 +181,8 @@ void *normal_thread(void *arg)
 	jt2 = time.tv_sec*1000 + time.tv_usec/1000;
 	report_job_complete(SC_NORMAL, jt2 - jt1);
 
-	printf("Thread %x with %s class is terminated\n", targ.tid, targ.class);
+	printf("Thread %x with %s class is terminated on CPU %d\n", targ.tid,
+	       targ.class, targ.core);
 	return NULL;
 }
 
@@ -218,7 +221,7 @@ void * handle_normals(void *arg)
 		/* sleep to allow new thread to execute */
 		usleep(1000);
 	}
-	printf("Created %d SCHED_OTHER threads\n", i);
+	printf("Created %d SCHED_OTHER threads on CPU %d\n", i, targ.core);
 
 	/* wait for all normal threads to complete */
 	for (i = 0; i < tmax; i++) {
@@ -272,7 +275,7 @@ void * handle_rrs(void *arg)
 		/* sleep to allow new thread to execute */
 		usleep(1000);
 	}
-	printf("Created %d SCHED_RR threads\n", i);
+	printf("Created %d SCHED_RR threads on CPU %d\n", i, targ.core);
 
 
 	/* wait for all rr threads to complete */
@@ -326,7 +329,7 @@ void * handle_fifos(void *arg)
 		/* sleep to allow new thread to execute */
 		usleep(1000);
 	}
-	printf("Created %d SCHED_FIFO threads\n", i);
+	printf("Created %d SCHED_FIFO threads on CPU %d\n", i, targ.core);
 
 	/* wait for all fifo threads to complete */
 	for (i = 0; i < tmax; i++) {
