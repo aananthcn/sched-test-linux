@@ -39,18 +39,19 @@ int			StartTime; /* in millisecond */
  *****************************************************************************/
 static print_item(struct thread_metrics *p, int full)
 {
-	printf("\tNo of atomic loops: %lu\n", p->count);
-	printf("\tNo of for-loops: %d\n", p->loops);
-	printf("\tNo of jobs (N for-loops): %d\n", p->jobs);
-	printf("\tSum of all loop duration (msec): %d\n",
+	printf("\tNo of loops    : %lu\n", p->count);
+	printf("\tNo of jobs     : %d\n", p->loops);
+	printf("\tNo of threads  : %d\n", p->jobs);
+#if 1
+	printf("\tCPU usage (ms) : %d\n",
 	       p->loop_period);
-
+#endif
 	if(full == 0)
 		return;
 
-	printf("\tSum of all job duration (msec) : %d\n",
+	printf("\tCPU usage (ms) : %d\n",
 	       p->job_period);
-	printf("\tTotal duration (ms) from start to end (incl.wait time) : %d\n",
+	printf("\tDuration (ms)  : %d\n",
 	       p->total_period);
 }
 

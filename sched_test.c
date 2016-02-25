@@ -225,6 +225,9 @@ void * handle_normals(void *arg)
 		pthread_join(tid_n[i], NULL);
 	}
 
+	/* wait till all threads report job complete */
+	while(Metrics[SC_NORMAL].jobs < tmax);
+
 	if (tid_n != NULL)
 		free(tid_n);
 
@@ -277,6 +280,9 @@ void * handle_rrs(void *arg)
 		pthread_join(tid_r[i], NULL);
 	}
 
+	/* wait till all threads report job complete */
+	while(Metrics[SC_RR].jobs < tmax);
+
 	if (tid_r != NULL)
 		free(tid_r);
 
@@ -326,6 +332,9 @@ void * handle_fifos(void *arg)
 	for (i = 0; i < tmax; i++) {
 		pthread_join(tid_f[i], NULL);
 	}
+
+	/* wait till all threads report job complete */
+	while(Metrics[SC_FIFO].jobs < tmax);
 
 	if (tid_f != NULL)
 		free(tid_f);

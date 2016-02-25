@@ -20,6 +20,7 @@ struct thread_metrics {
 	int total_period;
 };
 
+extern struct thread_metrics	Metrics[];
 
 void report_loop_increment(enum sched_class sc);
 void report_loop_complete(enum sched_class sc, unsigned long period);
