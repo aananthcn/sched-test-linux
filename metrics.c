@@ -56,46 +56,104 @@ static print_item(struct thread_metrics *p, int full)
 
 void metrics_print(int fifo, int rr, int other)
 {
-	printf("\n\nOverall summary:\n================\n");
+	int snapshot_cnt;
+	int f,r,o;
+	double f_l, r_l, o_l;
+	double f_status, r_status, o_status;
+
+	f = SC_FIFO;
+	r = SC_RR;
+	o = SC_NORMAL;
+
+	/* Check if criteria for printing snapshot is met */
+	snapshot_cnt  = (other) ? 1 : 0;
+	snapshot_cnt += (fifo) ? 1 : 0;
+	snapshot_cnt += (rr) ? 1 : 0;
+	if(snapshot_cnt < 2)
+		goto print_summary;
+
+	/* compute data for printing job status in % */
+	o_l = (double) other * MaxLoops * MaxJobs;
+	f_l = (double) fifo * MaxLoops * MaxJobs;
+	r_l = (double) rr * MaxLoops * MaxJobs;
+
+	printf("\n\nJobs Snapshots:\n===============\n");
 	if(fifo > 0) {
-		printf("  SCHED_FIFO\n  ----------\n");
+		f_status = (MetSnapShot[f][f].count * 100.0) / f_l;
+		r_status = o_status = 0.0;
+
+		printf("\n Status when SCHED_FIFO completed \n");
+		printf(" ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ \n");
+		if(rr > 0) {
+			printf("  > SCHED_FIFO.RR\n");
+			print_item(&MetSnapShot[f][r], 0);
+			r_status = (MetSnapShot[f][r].count * 100.0) / r_l;
+		}
+		if(other > 0) {
+			printf("  > SCHED_FIFO.OTHERS\n");
+			print_item(&MetSnapShot[f][o], 0);
+			o_status = (MetSnapShot[f][o].count * 100.0) / o_l;
+		}
+		printf(" ... \n");
+		printf(" Job Status ==> FIFO: %.2f%%, RR: %.2f%%, OTHER: %.2f%%\n",
+		       f_status, r_status, o_status);
+	}
+
+	if(rr > 0) {
+		r_status = (MetSnapShot[r][r].count * 100.0) / r_l;
+		f_status = o_status = 0.0;
+
+		printf("\n Status when SCHED_RR completed \n");
+		printf(" ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ \n");
+		if(fifo > 0) {
+			printf("  > SCHED_RR.FIFO\n");
+			print_item(&MetSnapShot[r][f], 0);
+			f_status = (MetSnapShot[r][f].count * 100.0) / f_l;
+		}
+		if(other > 0) {
+			printf("  > SCHED_RR.OTHERS\n");
+			print_item(&MetSnapShot[r][o], 0);
+			o_status = (MetSnapShot[r][o].count * 100.0) / o_l;
+		}
+		printf(" ... \n");
+		printf(" Job Status ==> FIFO: %.2f%%, RR: %.2f%%, OTHER: %.2f%%\n",
+		       f_status, r_status, o_status);
+	}
+
+	if(other > 0) {
+		o_status = (MetSnapShot[o][o].count * 100.0) / o_l;
+		r_status = f_status = 0.0;
+
+		printf("\n Status when SCHED_OTHER completed \n");
+		printf(" ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ \n");
+		if(fifo > 0) {
+			printf("  > SCHED_OTHER.FIFO\n");
+			print_item(&MetSnapShot[o][f], 0);
+			f_status = (MetSnapShot[o][f].count * 100.0) / f_l;
+		}
+		if(rr > 0) {
+			printf("  > SCHED_OTHER.RR\n");
+			print_item(&MetSnapShot[o][r], 0);
+			r_status = (MetSnapShot[o][r].count * 100.0) / r_l;
+		}
+		printf(" ... \n");
+		printf(" Job Status ==> FIFO: %.2f%%, RR: %.2f%%, OTHER: %.2f%%\n",
+		       f_status, r_status, o_status);
+	}
+
+print_summary:
+	printf("\n\n\nOverall summary:\n================\n");
+	if(fifo > 0) {
+		printf("\n  SCHED_FIFO\n  ~~~~~~~~~~\n");
 		print_item(&Metrics[SC_FIFO], 1);
 	}
 	if(rr > 0) {
-		printf("  SCHED_RR\n  --------\n");
+		printf("\n  SCHED_RR\n  ~~~~~~~~\n");
 		print_item(&Metrics[SC_RR], 1);
 	}
 	if(other > 0) {
-		printf("  SCHED_OTHERS\n  ------------\n");
+		printf("\n  SCHED_OTHERS\n  ~~~~~~~~~~~~\n");
 		print_item(&Metrics[SC_NORMAL], 1);
-	}
-
-	printf("\n\nSnapshots:\n=========\n");
-	if(fifo > 0) {
-		printf(" The duration and count when FIFO completed \n");
-		printf("  > SCHED_FIFO.RR\n");
-		print_item(&MetSnapShot[SC_FIFO][SC_RR], 0);
-		printf("  > SCHED_FIFO.OTHERS\n");
-		print_item(&MetSnapShot[SC_FIFO][SC_NORMAL], 0);
-		printf(" ... \n");
-	}
-
-	if(rr > 0) {
-		printf(" The duration and count when RR completed \n");
-		printf("  > SCHED_RR.FIFO\n");
-		print_item(&MetSnapShot[SC_RR][SC_FIFO], 0);
-		printf("  > SCHED_RR.OTHERS\n");
-		print_item(&MetSnapShot[SC_RR][SC_NORMAL], 0);
-		printf(" ... \n");
-	}
-
-	if(other > 0) {
-		printf(" The duration and count when OTHER completed \n");
-		printf("  > SCHED_OTHERS.FIFO\n");
-		print_item(&MetSnapShot[SC_NORMAL][SC_FIFO], 0);
-		printf("  > SCHED_OTHERS.RR\n");
-		print_item(&MetSnapShot[SC_NORMAL][SC_RR], 0);
-		printf(" ... \n");
 	}
 }
 

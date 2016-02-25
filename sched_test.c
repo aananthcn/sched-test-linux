@@ -23,14 +23,16 @@
 #include "metrics.h"
 
 
-#define MAX_JOBS	(8)
-#define MAX_LOOP	(0xFFFFFF)
+#define MAX_JOBS	(0xFF)
+#define MAX_LOOP	(0xFFFFF)
 
 
 /******************************************************************************
  * Globals
  *****************************************************************************/
 pthread_barrier_t Barrier;
+unsigned long MaxJobs = MAX_JOBS;
+unsigned long MaxLoops = MAX_LOOP;
 
 
 /******************************************************************************
@@ -65,11 +67,11 @@ void *rr_thread(void *arg)
 	/* do the main job */
 	gettimeofday(&time, NULL);
 	jt1 = time.tv_sec*1000 + time.tv_usec/1000;
-	for (i = 0; i < MAX_JOBS; i++) {
+	for (i = 0; i < MaxJobs; i++) {
 		/* do a loop */
 		gettimeofday(&time, NULL);
 		lt1 = time.tv_sec*1000 + time.tv_usec/1000;
-		for (j = 0; j < MAX_LOOP; j++) {
+		for (j = 0; j < MaxLoops; j++) {
 			rr_count++;
 			report_loop_increment(SC_RR);
 		}
@@ -114,11 +116,11 @@ void *fifo_thread(void *arg)
 	/* do the main job */
 	gettimeofday(&time, NULL);
 	jt1 = time.tv_sec*1000 + time.tv_usec/1000;
-	for (i = 0; i < MAX_JOBS; i++) {
+	for (i = 0; i < MaxJobs; i++) {
 		/* do a loop */
 		gettimeofday(&time, NULL);
 		lt1 = time.tv_sec*1000 + time.tv_usec/1000;
-		for (j = 0; j < MAX_LOOP; j++) {
+		for (j = 0; j < MaxLoops; j++) {
 			fifo_count++;
 			report_loop_increment(SC_FIFO);
 		}
@@ -161,11 +163,11 @@ void *normal_thread(void *arg)
 	/* do the main job */
 	gettimeofday(&time, NULL);
 	jt1 = time.tv_sec*1000 + time.tv_usec/1000;
-	for (i = 0; i < MAX_JOBS; i++) {
+	for (i = 0; i < MaxJobs; i++) {
 		/* do a loop */
 		gettimeofday(&time, NULL);
 		lt1 = time.tv_sec*1000 + time.tv_usec/1000;
-		for (j = 0; j < MAX_LOOP; j++) {
+		for (j = 0; j < MaxLoops; j++) {
 			normal_count++;
 			report_loop_increment(SC_NORMAL);
 		}
@@ -343,6 +345,8 @@ void print_usage(char *prog)
 	printf("\t  -f\tCreates FX number of SCHED_FIFO threads\n");
 	printf("\t  -r\tCreates RX number of SCHED_RR threads\n");
 	printf("\t  -c\tRuns all the above threads in the CPU core 'CN'\n");
+	printf("\t  -L\tNumber of loops each Job to make\n");
+	printf("\t  -J\tNumber of jobs each threads to do before exit\n");
 	printf("\n   Note:\n   -----");
 	printf("\n\t=>  '-c' option is mandatory");
 	printf("\n\t=>  at least one thread is mandatory");
@@ -354,6 +358,7 @@ int main(int argc, char *argv[])
 {
 	int core, sched_other, sched_fifo, sched_rr;
 	int c, threads;
+	unsigned long ln, lf, lr;
 	pthread_t tid_n, tid_f, tid_r;
 	pthread_attr_t attr;
 	struct thread_arg targ;
@@ -365,26 +370,32 @@ int main(int argc, char *argv[])
 		return -1;
 	}
 
-        while ((c = getopt(argc, argv, "n:f:r:c:")) != -1) {
-                switch (c) {
-                case 'n': /* Number of SCHED_NORMAL or SCHED_OTHER threads */
-                       sched_other = atoi(optarg);
-                        break;
-                case 'f': /* Number of SCHED_FIFO threads */
-                       sched_fifo = atoi(optarg);
-                        break;
-                case 'r': /* Number of SCHED_RR threads */
-                       sched_rr = atoi(optarg);
-                        break;
-                case 'c': /* Number of SCHED_FIFO threads */
-                       core = atoi(optarg);
-                        break;
-                default:
-                        printf("arg \'-%c\' not supported\n", c);
+	while ((c = getopt(argc, argv, "n:f:r:c:")) != -1) {
+		switch (c) {
+		case 'n': /* Number of SCHED_NORMAL or SCHED_OTHER threads */
+			sched_other = atoi(optarg);
+			break;
+		case 'f': /* Number of SCHED_FIFO threads */
+			sched_fifo = atoi(optarg);
+			break;
+		case 'r': /* Number of SCHED_RR threads */
+			sched_rr = atoi(optarg);
+			break;
+		case 'c': /* Number of SCHED_FIFO threads */
+			core = atoi(optarg);
+			break;
+		case 'J': /* Max number of Jobs (1 job = 'L' loops) */
+			MaxJobs = atoi(optarg);
+			break;
+		case 'L': /* Max number loops (the basic work for threads) */
+			MaxLoops = atoi(optarg);
+			break;
+		default:
+			printf("arg \'-%c\' not supported\n", c);
 			print_usage(argv[0]);
 			return -1;
-                }
-        }
+		}
+	}
 
 	if ((core == -1) && ((sched_other == -1) || (sched_fifo == -1) ||
 			     (sched_rr == -1))) {

@@ -25,5 +25,7 @@ enum sched_class {
 	SC_MAX
 };
 
+extern unsigned long MaxJobs;
+extern unsigned long MaxLoops;
 
 #endif
