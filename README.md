@@ -7,7 +7,7 @@ SCHED_OTHERS) by modifying /proc/sys/kernel/sched_rt_runtime_us
 
 Usage:
 ======
-    ./sched_test -n NX -f NF -r NR -C CC -d DD [-F FF]
+    ./sched_test -n NX -f NF -r NR -C CC [-F FF] [-R RR] ...
         -f	Creates FX number of SCHED_FIFO threads
         -r	Creates RX number of SCHED_RR threads
         -n	Creates NX number of SCHED_OTHER threads
