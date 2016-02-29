@@ -25,6 +25,7 @@
 
 #define MAX_JOBS	(0xFF)
 #define MAX_LOOP	(0xFFFFF)
+#define MAX_THREADS	(60)
 
 
 /******************************************************************************
@@ -352,41 +353,43 @@ void print_usage(char *prog)
 	if(prog == NULL)
 		return;
 
-	printf("\nUsage:\n======\n   %s -n NX -f NF -r NR -c CC -d DD [-D DD]\n", prog);
-	printf("\t  -n\tCreates NX number of SCHED_OTHER threads\n");
+	printf("\nUsage:\n======\n   %s -n NX -f NF -r NR -c CC -d DD [-F FF]\n", prog);
 	printf("\t  -f\tCreates FX number of SCHED_FIFO threads\n");
 	printf("\t  -r\tCreates RX number of SCHED_RR threads\n");
-	printf("\t  -c\tRuns all the above threads in the CPU core 'CC'\n");
-	printf("\t  -d\tDuplicates and distribute SCHED_OTHER to CPU Core 'DD'\n");
-	printf("\t  -D\tDuplicates and distribute SCHED_RR to CPU Core 'DD'\n");
+	printf("\t  -n\tCreates NX number of SCHED_OTHER threads\n");
+	printf("\t  -C\tRuns all the above threads in the CPU core 'CC'\n");
+	printf("\t  :::::O::P::T::I::O::N::A::L::::A::R::G::U::M::E::N::T::S:::::\n");
+	printf("\t  -F\tDuplicates and distribute SCHED_FIFO to CPU Core 'FF'\n");
+	printf("\t  -R\tDuplicates and distribute SCHED_RR to CPU Core 'RR'\n");
+	printf("\t  -N\tDuplicates and distribute SCHED_OTHER to CPU Core 'NN'\n");
 	printf("\t  -L\tNumber of loops each Job to make\n");
 	printf("\t  -J\tNumber of jobs each threads to do before exit\n");
 	printf("\n   Note:\n   -----");
 	printf("\n\t=>  '-c' option is mandatory");
-	printf("\n\t=>  at least one thread is mandatory");
-	printf("\n\t=>  do not use more than 30 threads in total");
-	printf("\n\t=>  do not use -d and -D together");
+	printf("\n\t=>  at least one of '-r' '-f' '-n' option is mandatory");
+	printf("\n\t=>  do not use more than %d threads in total", MAX_THREADS);
 	printf("\n\n");
 }
 
 int main(int argc, char *argv[])
 {
 	int core, sched_other, sched_fifo, sched_rr;
-	int core_o, core_O, c, threads, max_threads;
+	int core_f, core_n, core_r, c, threads, max_threads;
 	int dist_threads;
 	unsigned long ln, lf, lr;
-	pthread_t tid_n, tid_nd, tid_f, tid_r, tid_rd;
+	pthread_t tid_n, tid_nd, tid_f, tid_fd, tid_r, tid_rd;
 	pthread_attr_t attr;
 	struct thread_arg targ;
 
 
-	sched_other = sched_fifo = sched_rr = core = core_o = core_O = -1;
+	sched_other = sched_fifo = sched_rr = -1;
+	core_n = core_f = core_r = core = -1;
 	if(metrics_init() < 0) {
 		printf("Metrics init failed!!\n");
 		return -1;
 	}
 
-	while ((c = getopt(argc, argv, "n:f:r:c:d:D:J:L:")) != -1) {
+	while ((c = getopt(argc, argv, "f:r:n:F:R:N:C:J:L:")) != -1) {
 		switch (c) {
 		case 'n': /* Number of SCHED_NORMAL or SCHED_OTHER threads */
 			sched_other = atoi(optarg);
@@ -397,14 +400,17 @@ int main(int argc, char *argv[])
 		case 'r': /* Number of SCHED_RR threads */
 			sched_rr = atoi(optarg);
 			break;
-		case 'c': /* CPU core for all threads */
+		case 'C': /* CPU core for all threads */
 			core = atoi(optarg);
 			break;
-		case 'd': /* CPU core for SCHED_OTHER threads alone */
-			core_o = atoi(optarg);
+		case 'F': /* CPU core for SCHED_FIFO threads alone */
+			core_f = atoi(optarg);
 			break;
-		case 'D': /* CPU core for SCHED_RR threads alone */
-			core_O = atoi(optarg);
+		case 'N': /* CPU core for SCHED_OTHER threads alone */
+			core_n = atoi(optarg);
+			break;
+		case 'R': /* CPU core for SCHED_RR threads alone */
+			core_r = atoi(optarg);
 			break;
 		case 'J': /* Max number of Jobs (1 job = 'L' loops) */
 			MaxJobs = atoi(optarg);
@@ -426,30 +432,31 @@ int main(int argc, char *argv[])
 		return -1;
 	}
 
-	if (((core_o != -1) && (sched_other == -1)) ||
-	    ((core_O != -1) && (sched_rr == -1))) {
-		printf("\nMain option not provided for the duplicate options -d or -D!\n");
+	if ((core_n != -1) && (sched_other == -1)) {
+		printf("\nError: -N is provided but -n option is not provided\n");
+		print_usage(argv[0]);
+		return -1;
+	}
+	if ((core_f != -1) && (sched_fifo == -1)) {
+		printf("\nError: -F is provided but -f option is not provided\n");
+		print_usage(argv[0]);
+		return -1;
+	}
+	if ((core_r != -1) && (sched_rr == -1)) {
+		printf("\nError: -R is provided but -r option is not provided\n");
 		print_usage(argv[0]);
 		return -1;
 	}
 
-	if ((core_o != -1) && (core_O != -1)) {
-		printf("\nPlease read the note on -d and -D option below!\n");
-		print_usage(argv[0]);
-		return -1;
-	}
-	else {
-		dist_threads = 1;
-	}
-
+	threads = 0;
 	if (sched_other > 0)
-		threads = sched_other * ((core_o == -1) ? 1 : 2);
+		threads += sched_other * ((core_n == -1) ? 1 : 2);
 	if (sched_fifo > 0)
-		threads += sched_fifo;
+		threads += sched_fifo * ((core_f == -1) ? 1 : 2);
 	if (sched_rr > 0)
-		threads += sched_rr * ((core_O == -1) ? 1 : 2);
+		threads += sched_rr * ((core_r == -1) ? 1 : 2);
 
-	max_threads = 30 + dist_threads * 10;
+	max_threads = MAX_THREADS;
 	if (threads > max_threads) {
 		printf("\nPlease limit your number of threads! %d\n", threads);
 		print_usage(argv[0]);
@@ -472,9 +479,9 @@ int main(int argc, char *argv[])
 		/* sleep to allow new thread to execute */
 		usleep(1000);
 
-		/* duplicate SCHED_OTHER and distribute to core_o */
-		if(core_o != -1) {
-			targ.core = core_o;
+		/* duplicate SCHED_OTHER and distribute to core_n */
+		if(core_n != -1) {
+			targ.core = core_n;
 			strcpy(targ.class, "SCHED_OTHER");
 			targ.max_threads = sched_other;
 			assert(pthread_create(&tid_nd, &attr, handle_normals,
@@ -490,9 +497,17 @@ int main(int argc, char *argv[])
 		targ.max_threads = sched_fifo;
 		assert(pthread_create(&tid_f, &attr, handle_fifos,
 				      (void *)&targ) == 0);
-
 		/* sleep to allow new thread to execute */
 		usleep(1000);
+
+		/* duplicate SCHED_FIFO and distribute to core_f */
+		if(core_f != -1) {
+			targ.core = core_f;
+			strcpy(targ.class, "SCHED_FIFO");
+			targ.max_threads = sched_fifo;
+			assert(pthread_create(&tid_fd, &attr, handle_fifos,
+					      (void *)&targ) == 0);
+		}
 	}
 
 	/* create master thread for SCHED_RR class */
@@ -504,9 +519,9 @@ int main(int argc, char *argv[])
 		/* sleep to allow new thread to execute */
 		usleep(1000);
 
-		/* duplicate SCHED_RR and distribute to core_O */
-		if(core_O != -1) {
-			targ.core = core_O;
+		/* duplicate SCHED_RR and distribute to core_r */
+		if(core_r != -1) {
+			targ.core = core_r;
 			strcpy(targ.class, "SCHED_RR");
 			targ.max_threads = sched_rr;
 			assert(pthread_create(&tid_rd, &attr, handle_rrs,
@@ -520,17 +535,19 @@ int main(int argc, char *argv[])
 	/* first wait for all fifo threads to complete */
 	if (sched_fifo > 0) {
 		pthread_join(tid_f, NULL);
+		if (core_f != -1)
+			pthread_join(tid_fd, NULL);
 	}
 	/* then wait for all rr threads to complete */
 	if (sched_rr > 0) {
 		pthread_join(tid_r, NULL);
-		if (core_O != -1)
+		if (core_r != -1)
 			pthread_join(tid_rd, NULL);
 	}
 	/* and finally wait for all normal threads to complete */
 	if (sched_other > 0) {
 		pthread_join(tid_n, NULL);
-		if (core_o != -1)
+		if (core_n != -1)
 			pthread_join(tid_nd, NULL);
 	}
 
